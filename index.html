@@ -264,6 +264,10 @@ footer .status { font-variant-numeric: tabular-nums; }
     var max = 0; Object.keys(items).forEach(function (k) { max = Math.max(max, items[k].order || 0); });
     return max + 1;
   }
+  function topOrder() {
+    var min = 0; Object.keys(items).forEach(function (k) { min = Math.min(min, items[k].order || 0); });
+    return min - 1;
+  }
   function el(tag, cls, text) {
     var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e;
   }
@@ -387,7 +391,7 @@ footer .status { font-variant-numeric: tabular-nums; }
     var t = newText.value.trim(); if (!t) return;
     var id = uid();
     if (filter === 'done') { filter = 'all'; }
-    saveItem(id, { text: t, done: false, due: newDate.value || '', order: nextOrder(), createdAt: Date.now() });
+    saveItem(id, { text: t, done: false, due: newDate.value || '', order: topOrder(), createdAt: Date.now() });
     newText.value = ''; newDate.value = ''; newDateLabel.textContent = '날짜'; newDateBtn.classList.remove('set');
     newText.focus();
   });
