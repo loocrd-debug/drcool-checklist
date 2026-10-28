@@ -142,6 +142,15 @@ li.done .text { color: var(--faint); font-weight: 400; text-decoration: line-thr
 .due.late { background: var(--up); color: #fff; font-weight: 700; }
 li.done .due { background: var(--soft); color: var(--faint); font-weight: 400; }
 
+/* drag handle */
+.grip { flex: 0 0 auto; width: 28px; height: 28px; margin: -2px -6px 0 0; border: 0; background: transparent; color: var(--faint); cursor: grab; display: grid; place-items: center; padding: 0; touch-action: none; border-radius: 6px; }
+.grip:hover { color: var(--muted); background: var(--soft); }
+.grip svg { width: 14px; height: 14px; }
+li.item.dragging { opacity: .45; }
+li.item.drop-above { box-shadow: 0 -2px 0 0 var(--fg) inset; }
+li.item.drop-below { box-shadow: 0 2px 0 0 var(--fg) inset; }
+li.editing .grip { display: none; }
+
 /* inline editor */
 li.editing .body { display: none; }
 .editor { flex: 1; min-width: 0; display: none; flex-direction: column; gap: 10px; }
@@ -346,6 +355,11 @@ footer .status { font-variant-numeric: tabular-nums; }
       ed.appendChild(er);
       li.appendChild(ed);
 
+      var grip = el('button', 'grip'); grip.type = 'button'; grip.setAttribute('aria-label', '끌어서 순서 바꾸기');
+      grip.innerHTML = '<svg viewBox="0 0 14 14" fill="currentColor"><circle cx="4" cy="3" r="1.4"/><circle cx="10" cy="3" r="1.4"/><circle cx="4" cy="7" r="1.4"/><circle cx="10" cy="7" r="1.4"/><circle cx="4" cy="11" r="1.4"/><circle cx="10" cy="11" r="1.4"/></svg>';
+      grip.addEventListener('pointerdown', function (e) { startDrag(e, li); });
+      li.appendChild(grip);
+
       listEl.appendChild(li);
       if (editingId === it.id) { ti.focus(); ti.setSelectionRange(ti.value.length, ti.value.length); }
     });
@@ -383,6 +397,48 @@ footer .status { font-variant-numeric: tabular-nums; }
 
   var lastDay = todayStr();
   setInterval(function () { var d = todayStr(); if (d !== lastDay) { lastDay = d; render(); } }, 60000);
+
+  // ---------- drag to reorder (mouse + touch via pointer events) ----------
+  function startDrag(e, li) {
+    if (editingId) return;
+    e.preventDefault();
+    var grip = e.currentTarget; var target = null, place = null;
+    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+    li.classList.add('dragging');
+    function clearMarks() { Array.prototype.forEach.call(listEl.children, function (c) { c.classList.remove('drop-above', 'drop-below'); }); }
+    function move(ev) {
+      var over = document.elementFromPoint(ev.clientX, ev.clientY);
+      var row = over && over.closest ? over.closest('li.item') : null;
+      clearMarks();
+      if (!row || row === li) { target = null; return; }
+      var r = row.getBoundingClientRect();
+      place = ev.clientY < r.top + r.height / 2 ? 'above' : 'below';
+      target = row; row.classList.add('drop-' + place);
+    }
+    function end() {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', end);
+      grip.removeEventListener('pointercancel', end);
+      li.classList.remove('dragging'); clearMarks();
+      if (!target) return;
+      var rows = Array.prototype.slice.call(listEl.children).filter(function (c) { return c !== li; });
+      var idx = rows.indexOf(target) + (place === 'below' ? 1 : 0);
+      var prev = rows[idx - 1], next = rows[idx];
+      var po = prev ? (items[prev.dataset.id].order || 0) : null;
+      var no = next ? (items[next.dataset.id].order || 0) : null;
+      var newOrder;
+      if (po === null && no === null) return;
+      if (po === null) newOrder = no - 1;
+      else if (no === null) newOrder = po + 1;
+      else newOrder = (po + no) / 2;
+      var id = li.dataset.id;
+      if (items[id].order === newOrder) return;
+      saveItem(id, Object.assign({}, items[id], { order: newOrder }));
+    }
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+  }
 
   // 기기에만 저장돼 있던 항목을 인터넷 저장소로 한 번 옮깁니다.
   var migrated = false;
