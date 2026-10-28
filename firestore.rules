@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 체크리스트 항목: 목록 ID(LIST_ID, 12자 이상)를 아는 사람만 접근합니다.
+    // 로그인 없이 쓰기 위해 이 경로만 열어 두고, 나머지 경로는 전부 막습니다.
+    match /lists/{listId}/items/{itemId} {
+      allow read, delete: if listId.size() >= 12;
+      allow create, update: if listId.size() >= 12
+        && request.resource.data.keys().hasOnly(['text', 'done', 'due', 'order', 'createdAt', 'doneAt', 'color'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
