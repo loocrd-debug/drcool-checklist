@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 /* ============================================================
    ★ 설정 — Firebase 콘솔에서 복사한 값을 아래에 붙여 넣으세요.
@@ -173,6 +174,9 @@ li.editing .editor { display: flex; }
 .empty b { display: block; color: var(--fg); font-weight: 700; font-size: 15px; margin-bottom: 6px; letter-spacing: -0.02em; }
 footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; font-size: 11px; color: var(--muted); letter-spacing: 0; }
 footer .status { font-variant-numeric: tabular-nums; }
+.footbtns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.capturing .grip { visibility: hidden; }
+.capturing .topbar { position: static; }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: no-preference) {
   .check { transition: background .12s, border-color .12s; }
@@ -206,7 +210,10 @@ footer .status { font-variant-numeric: tabular-nums; }
 
   <footer>
     <span class="status" id="status">불러오는 중…</span>
-    <button class="btn quiet" id="clearDone" hidden>완료 항목 지우기</button>
+    <span class="footbtns">
+      <button class="btn quiet" id="clearDone" hidden>완료 항목 지우기</button>
+      <button class="btn quiet" id="saveImg" type="button">이미지로 저장</button>
+    </span>
   </footer>
 </div>
 
@@ -398,6 +405,60 @@ footer .status { font-variant-numeric: tabular-nums; }
   clearBtn.addEventListener('click', function () {
     sorted().filter(function (r) { return r.done; }).forEach(function (r) { removeItem(r.id); });
   });
+
+  // ---------- save the whole list as an image ----------
+  var saveBtn = document.getElementById('saveImg');
+  saveBtn.addEventListener('click', function () {
+    if (typeof html2canvas === 'undefined') { setStatus('이미지 도구를 불러오지 못했습니다 — 새로고침 후 다시 시도'); return; }
+    var wrap = document.querySelector('.wrap');
+    var prevStatus = statusEl.textContent;
+    saveBtn.disabled = true; setStatus('이미지 만드는 중…');
+    editingId = null; render();
+    document.body.classList.add('capturing');
+    var scrollBefore = window.scrollY; window.scrollTo(0, 0);
+    var ready = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    ready.then(function () {
+      return html2canvas(wrap, {
+        backgroundColor: getComputedStyle(document.body).backgroundColor,
+        scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0,
+        ignoreElements: function (n) { return n.matches && n.matches('.addrow, .tabs, footer'); }
+      });
+    }).then(function (canvas) {
+      return new Promise(function (res) { canvas.toBlob(res, 'image/png'); });
+    }).then(function (blob) {
+      document.body.classList.remove('capturing'); window.scrollTo(0, scrollBefore);
+      var name = '체크리스트_' + todayStr() + '.png';
+      return deliverFile(blob, name);
+    }).then(function (how) {
+      setStatus(how === 'cancel' ? prevStatus : '이미지 저장됨');
+    }).catch(function (e) {
+      document.body.classList.remove('capturing');
+      setStatus('이미지 저장 실패: ' + (e && (e.code || e.message) || e));
+    }).then(function () { saveBtn.disabled = false; });
+  });
+  function deliverFile(blob, name) {
+    var p = Promise.resolve(null);
+    if (window.claude && window.claude.use) p = Promise.resolve(window.claude.use('downloads')).catch(function () { return null; });
+    return p.then(function (dl) {
+      if (dl) {
+        return dl.save({ filename: name, data: blob }).then(function () { return 'saved'; })
+          .catch(function (e) { if (e && e.code === 'declined') return 'cancel'; throw e; });
+      }
+      var file = null;
+      try { file = new File([blob], name, { type: 'image/png' }); } catch (e) {}
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        return navigator.share({ files: [file], title: name }).then(function () { return 'saved'; })
+          .catch(function (e) { if (e && e.name === 'AbortError') return 'cancel'; return anchorDownload(blob, name); });
+      }
+      return anchorDownload(blob, name);
+    });
+  }
+  function anchorDownload(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    return 'saved';
+  }
 
   var lastDay = todayStr();
   setInterval(function () { var d = todayStr(); if (d !== lastDay) { lastDay = d; render(); } }, 60000);
