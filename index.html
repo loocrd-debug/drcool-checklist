@@ -105,6 +105,12 @@ h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.03em; }
   display: inline-flex; align-items: center; white-space: nowrap; letter-spacing: 0;
 }
 .datebtn.set { color: var(--fg); border-color: var(--line-strong); font-weight: 500; }
+.tierbtn { flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; height: 32px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; letter-spacing: 0; white-space: nowrap; }
+.tierbtn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--line-strong); font-weight: 700; }
+.editor .tierbtn { height: 30px; }
+.imp { display: inline-block; margin-top: 6px; margin-right: 6px; font-size: 11px; line-height: 1; letter-spacing: 0; padding: 5px 8px; border-radius: 3px; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+li.done .imp { background: var(--soft); color: var(--faint); font-weight: 400; }
+.tab .n { font-weight: 400; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
 .datebtn input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .addbtn {
   flex: 0 0 auto; border: 0; background: var(--accent); color: var(--accent-ink);
@@ -192,6 +198,7 @@ footer .status { font-variant-numeric: tabular-nums; }
     </div>
     <form class="addrow" id="addForm">
       <input id="newText" type="text" placeholder="할 일을 적고 Enter" autocomplete="off" enterkeyhint="done">
+      <button type="button" class="tierbtn" id="newTierBtn" title="누르면 중요 항목" aria-pressed="false">중요</button>
       <label class="datebtn" id="newDateBtn" title="마감일 (선택)">
         <span id="newDateLabel">날짜</span>
         <input type="date" id="newDate">
@@ -200,7 +207,8 @@ footer .status { font-variant-numeric: tabular-nums; }
     </form>
     <div class="tabs" role="tablist">
       <button class="tab on" type="button" data-filter="all" id="tabAll">전체</button>
-      <button class="tab" type="button" data-filter="open" id="tabOpen">진행 중</button>
+      <button class="tab" type="button" data-filter="big" id="tabBig">중요</button>
+      <button class="tab" type="button" data-filter="small" id="tabSmall">일반</button>
       <button class="tab" type="button" data-filter="done" id="tabDone">완료</button>
     </div>
   </div>
@@ -234,12 +242,13 @@ footer .status { font-variant-numeric: tabular-nums; }
   var items = {};          // id -> {text, done, due, order, createdAt}
   var editingId = null;
   var filter = 'all';
+  var newTier = 'small';
   var store = null;        // 'db' | 'local'
   var db = null;
   var LS_KEY = 'checklist-items-v1';
   var LS_FILTER = 'checklist-filter';
 
-  try { var f = localStorage.getItem(LS_FILTER); if (f === 'open' || f === 'done') filter = f; } catch (e) {}
+  try { var f = localStorage.getItem(LS_FILTER); if (f === 'big' || f === 'small' || f === 'done') filter = f; } catch (e) {}
 
   // ---------- helpers ----------
   function uid() { return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -304,9 +313,9 @@ footer .status { font-variant-numeric: tabular-nums; }
   function render() {
     var all = sorted();
     var rows = all.filter(function (r) {
-      if (filter === 'open') return !r.done;
       if (filter === 'done') return r.done;
-      return true;
+      if (filter === 'all') return true;
+      return (r.tier || 'small') === filter;
     });
     listEl.textContent = '';
     rows.forEach(function (it) {
@@ -322,6 +331,7 @@ footer .status { font-variant-numeric: tabular-nums; }
 
       var body = el('div', 'body');
       body.appendChild(el('div', 'text' + (it.color ? ' c-' + it.color : ''), it.text));
+      if (it.tier === 'big' && filter !== 'big') body.appendChild(el('span', 'imp', '중요'));
       var dl = dueLabel(it.due);
       if (dl.text) body.appendChild(el('span', 'due ' + dl.cls, dl.text));
       body.addEventListener('click', function () { editingId = it.id; render(); });
@@ -332,6 +342,10 @@ footer .status { font-variant-numeric: tabular-nums; }
       var ti = document.createElement('input'); ti.type = 'text'; ti.value = it.text; ti.id = 'edit-' + it.id;
       ed.appendChild(ti);
       var er = el('div', 'editrow');
+      var tier = it.tier || 'small';
+      var tp = el('button', 'tierbtn' + (tier === 'big' ? ' on' : ''), '중요'); tp.type = 'button';
+      tp.addEventListener('click', function () { tier = tier === 'big' ? 'small' : 'big'; tp.classList.toggle('on', tier === 'big'); tp.setAttribute('aria-pressed', tier === 'big'); });
+      er.appendChild(tp);
       var color = it.color || '';
       var sws = el('div', 'swatches');
       [['', '기본'], ['red', '빨강'], ['blue', '파랑']].forEach(function (c) {
@@ -358,7 +372,7 @@ footer .status { font-variant-numeric: tabular-nums; }
       function commit() {
         var t = ti.value.trim(); if (!t) { editingId = null; removeItem(it.id); return; }
         editingId = null;
-        saveItem(it.id, Object.assign({}, items[it.id], { text: t, due: di.value || '', color: color }));
+        saveItem(it.id, Object.assign({}, items[it.id], { text: t, due: di.value || '', color: color, tier: tier }));
       }
       save.addEventListener('click', commit);
       ti.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { editingId = null; render(); } });
@@ -376,19 +390,32 @@ footer .status { font-variant-numeric: tabular-nums; }
     });
 
     var total = all.length, done = all.filter(function (r) { return r.done; }).length;
+    var nBig = all.filter(function (r) { return !r.done && r.tier === 'big'; }).length;
+    var nSmall = all.filter(function (r) { return !r.done && r.tier !== 'big'; }).length;
     emptyEl.hidden = rows.length > 0;
     countEl.innerHTML = total ? '<b>' + done + '</b> / ' + total + ' 완료' : '';
     clearBtn.hidden = done === 0;
-    tabs.forEach(function (t) { t.classList.toggle('on', t.dataset.filter === filter); });
+    tabs.forEach(function (t) {
+      t.classList.toggle('on', t.dataset.filter === filter);
+      var f = t.dataset.filter;
+      var n = f === 'all' ? nBig + nSmall : f === 'big' ? nBig : f === 'small' ? nSmall : done;
+      var label = f === 'all' ? '전체' : f === 'big' ? '중요' : f === 'small' ? '일반' : '완료';
+      t.innerHTML = label + (n ? '<span class="n">' + n + '</span>' : '');
+    });
   }
 
   // ---------- events ----------
   tabs.forEach(function (t) {
     t.addEventListener('click', function () {
       filter = t.dataset.filter; editingId = null; render();
+      setNewTier(filter === 'big' ? 'big' : 'small');
       try { localStorage.setItem(LS_FILTER, filter); } catch (e) {}
     });
   });
+  var newTierBtn = document.getElementById('newTierBtn');
+  function setNewTier(t) { newTier = t; newTierBtn.classList.toggle('on', t === 'big'); newTierBtn.setAttribute('aria-pressed', t === 'big'); }
+  newTierBtn.addEventListener('click', function () { setNewTier(newTier === 'big' ? 'small' : 'big'); });
+  setNewTier(filter === 'big' ? 'big' : 'small');
   newDate.addEventListener('change', function () {
     newDateLabel.textContent = newDate.value || '날짜';
     newDateBtn.classList.toggle('set', !!newDate.value);
@@ -397,8 +424,8 @@ footer .status { font-variant-numeric: tabular-nums; }
     e.preventDefault();
     var t = newText.value.trim(); if (!t) return;
     var id = uid();
-    if (filter === 'done') { filter = 'all'; }
-    saveItem(id, { text: t, done: false, due: newDate.value || '', order: topOrder(), createdAt: Date.now() });
+    if (filter === 'done' || (filter !== 'all' && filter !== newTier)) { filter = newTier; }
+    saveItem(id, { text: t, done: false, due: newDate.value || '', order: topOrder(), createdAt: Date.now(), tier: newTier });
     newText.value = ''; newDate.value = ''; newDateLabel.textContent = '날짜'; newDateBtn.classList.remove('set');
     newText.focus();
   });
@@ -518,6 +545,7 @@ footer .status { font-variant-numeric: tabular-nums; }
       var d = local[k];
       var data = { text: String(d.text), done: !!d.done, due: d.due || '', order: base + i, createdAt: d.createdAt || Date.now() };
       if (d.color) data.color = d.color;
+      if (d.tier) data.tier = d.tier;
       items[k] = data;
       return db.collection('items').doc(k).set(data);
     });
