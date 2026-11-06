@@ -206,8 +206,8 @@ footer .status { font-variant-numeric: tabular-nums; }
       <button type="submit" class="addbtn">추가</button>
     </form>
     <div class="tabs" role="tablist">
-      <button class="tab on" type="button" data-filter="all" id="tabAll">전체</button>
-      <button class="tab" type="button" data-filter="big" id="tabBig">중요</button>
+      <button class="tab on" type="button" data-filter="big" id="tabBig">중요</button>
+      <button class="tab" type="button" data-filter="all" id="tabAll">전체</button>
       <button class="tab" type="button" data-filter="small" id="tabSmall">일반</button>
       <button class="tab" type="button" data-filter="done" id="tabDone">완료</button>
     </div>
@@ -241,14 +241,13 @@ footer .status { font-variant-numeric: tabular-nums; }
 
   var items = {};          // id -> {text, done, due, order, createdAt}
   var editingId = null;
-  var filter = 'all';
-  var newTier = 'small';
+  var filter = 'big';
+  var newTier = 'big';
   var store = null;        // 'db' | 'local'
   var db = null;
   var LS_KEY = 'checklist-items-v1';
   var LS_FILTER = 'checklist-filter';
 
-  try { var f = localStorage.getItem(LS_FILTER); if (f === 'big' || f === 'small' || f === 'done') filter = f; } catch (e) {}
 
   // ---------- helpers ----------
   function uid() { return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -409,7 +408,6 @@ footer .status { font-variant-numeric: tabular-nums; }
     t.addEventListener('click', function () {
       filter = t.dataset.filter; editingId = null; render();
       setNewTier(filter === 'big' ? 'big' : 'small');
-      try { localStorage.setItem(LS_FILTER, filter); } catch (e) {}
     });
   });
   var newTierBtn = document.getElementById('newTierBtn');
